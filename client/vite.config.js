@@ -2,8 +2,11 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// Hosted at https://miglz7wr405.github.io/Neyma-Miguel-/ (GitHub Pages).
-const BASE = '/Neyma-Miguel-/';
+// Base path differs per host:
+//  - Vercel / Netlify: served at the domain root  -> '/'
+//  - GitHub Pages (project site):  /Neyma-Miguel-/
+// Vercel sets process.env.VERCEL at build time, so we pick automatically.
+const BASE = process.env.VERCEL ? '/' : '/Neyma-Miguel-/';
 
 export default defineConfig({
   base: BASE,
