@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { getTheme, setTheme, getProfile, saveProfile } from '../lib/auth.js';
+import { compressImage, pickFile } from '../lib/media.js';
+import { canInstall, onInstallAvailable, promptInstall, isIOS, isStandalone } from '../lib/install.js';
+import { IconPencil, IconDownload, IconCamera } from '../lib/icons.jsx';
 
 const THEMES = [
   { id: 'rose', name: 'Rosa Confidencial', color: '#e91e63' },
@@ -7,102 +10,119 @@ const THEMES = [
   { id: 'midnight', name: 'Meia-Noite', color: '#3ea6ff' },
 ];
 
-export default function SettingsScreen({ me, onLogout, onThemeChange }) {
+export default function SettingsScreen({ me, bus, onLogout, onThemeChange, onProfileChanged }) {
   const [themeId, setThemeId] = useState(getTheme());
   const [displayName, setDisplayName] = useState(getProfile().displayName || '');
+  const [avatar, setAvatar] = useState(getProfile().avatar || null);
   const [savedToast, setSavedToast] = useState(false);
-  const [installEvent, setInstallEvent] = useState(null);
+  const [installable, setInstallable] = useState(canInstall());
+  const [iosHelp, setIosHelp] = useState(false);
 
-  useEffect(() => {
-    const h = (e) => {
-      e.preventDefault();
-      setInstallEvent(e);
-    };
-    window.addEventListener('beforeinstallprompt', h);
-    return () => window.removeEventListener('beforeinstallprompt', h);
-  }, []);
+  useEffect(() => onInstallAvailable(setInstallable), []);
 
   function pickTheme(t) {
-    setTheme(t);
-    setThemeId(t);
-    onThemeChange?.();
+    setTheme(t); setThemeId(t); onThemeChange?.();
+  }
+
+  function broadcastProfile(name, av) {
+    bus?.publishCtrl?.({ t: 'profile', name: name || me.name, avatar: av || null });
   }
 
   function handleSaveProfile() {
     saveProfile({ displayName: displayName || null });
+    broadcastProfile(displayName, avatar);
+    onProfileChanged?.();
+    setSavedToast(true);
+    setTimeout(() => setSavedToast(false), 1500);
+  }
+
+  async function changeAvatar() {
+    const f = await pickFile('image/*');
+    if (!f) return;
+    const dataUrl = await compressImage(f, 256, 0.8);
+    setAvatar(dataUrl);
+    saveProfile({ avatar: dataUrl });
+    broadcastProfile(displayName, dataUrl);
+    onProfileChanged?.();
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 1500);
   }
 
   async function installApp() {
-    if (!installEvent) return;
-    installEvent.prompt();
-    await installEvent.userChoice;
-    setInstallEvent(null);
+    if (isIOS()) { setIosHelp(true); return; }
+    await promptInstall();
   }
 
   return (
     <>
-      <header className="header">
-        <h1>Definições</h1>
-      </header>
+      <header className="header"><h1>Definições</h1></header>
       <div className="settings">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
-          <div className="avatar lg">{me.name[0]}</div>
+        <div className="profile-hero">
+          <button className="avatar lg av-edit" onClick={changeAvatar}>
+            {avatar ? <img src={avatar} alt="" /> : (displayName || me.name)[0]}
+            <span className="av-cam"><IconCamera /></span>
+          </button>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 600 }}>{me.name}</div>
+            <div style={{ fontSize: 18, fontWeight: 600 }}>{displayName || me.name}</div>
             <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>{me.phone}</div>
           </div>
         </div>
 
-        <h2>Perfil</h2>
+        <h2>O meu nome</h2>
         <div className="row">
+          <span className="row-ic"><IconPencil /></span>
           <input
             placeholder={me.name}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
             style={{ flex: 1, background: 'transparent', outline: 'none', fontSize: 15 }}
           />
-          <button className="btn-primary" style={{ padding: '8px 14px' }} onClick={handleSaveProfile}>
-            Guardar
-          </button>
+          <button className="btn-primary" style={{ padding: '8px 14px' }} onClick={handleSaveProfile}>Guardar</button>
         </div>
 
         <h2>Tema</h2>
         <div className="theme-picker">
           {THEMES.map((t) => (
-            <div
-              key={t.id}
-              className={`swatch ${t.id === themeId ? 'active' : ''}`}
+            <div key={t.id} className={`swatch ${t.id === themeId ? 'active' : ''}`}
               style={{ background: `linear-gradient(135deg, ${t.color}, #ffffff20)` }}
-              onClick={() => pickTheme(t.id)}
-              title={t.name}
-            />
+              onClick={() => pickTheme(t.id)} title={t.name} />
           ))}
         </div>
         <div style={{ color: 'var(--text-dim)', fontSize: 12, marginTop: 6 }}>
           {THEMES.find((t) => t.id === themeId)?.name}
         </div>
 
-        {installEvent && (
+        {!isStandalone() && (
           <>
             <h2>App</h2>
-            <div className="row" onClick={installApp} style={{ cursor: 'pointer' }}>
-              <label>📥 Descarregar / Instalar app no ecrã principal</label>
-            </div>
+            <button className="install-cta" onClick={installApp}>
+              <IconDownload /> Baixar / Instalar no ecrã principal
+            </button>
           </>
         )}
 
-        <h2>Segurança</h2>
+        <h2>Conta</h2>
         <div className="row" onClick={onLogout} style={{ cursor: 'pointer', color: 'var(--danger)' }}>
-          <label>Terminar sessão e apagar dados locais</label>
+          <label>Terminar sessão / trocar de conta</label>
         </div>
 
         <div style={{ marginTop: 40, textAlign: 'center', color: 'var(--text-dim)', fontSize: 12 }}>
-          Our Sacred Place · v1.0 · feito com amor 🤍
+          Our Sacred Place · feito com amor 🤍
         </div>
       </div>
 
+      {iosHelp && (
+        <div className="viewonce-modal" onClick={() => setIosHelp(false)}>
+          <div className="mini-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ margin: 0 }}>Instalar no iPhone</h3>
+            <p style={{ fontSize: 14, lineHeight: 1.5 }}>
+              Toca no botão <b>Partilhar</b> (o quadrado com a seta) e escolhe
+              <b> "Adicionar ao ecrã principal"</b>.
+            </p>
+            <button className="btn-primary" onClick={() => setIosHelp(false)}>Percebi</button>
+          </div>
+        </div>
+      )}
       {savedToast && <div className="toast">Guardado</div>}
     </>
   );

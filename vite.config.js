@@ -33,24 +33,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.pathname.startsWith('/api/media/'),
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'osp-media',
-              expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            },
-          },
-        ],
+        importScripts: ['sw-custom.js'],
       },
     }),
   ],
   server: {
     port: 5173,
-    proxy: {
-      '/api': 'http://localhost:3001',
-      '/socket.io': { target: 'http://localhost:3001', ws: true },
-    },
   },
 });

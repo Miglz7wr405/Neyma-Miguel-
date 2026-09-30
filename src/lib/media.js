@@ -58,6 +58,23 @@ export function fileToDataURL(file) {
   });
 }
 
+export function getLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('sem geolocalização'));
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => reject(err),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  });
+}
+
+export function humanSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 export async function recordAudio() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')

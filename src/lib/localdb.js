@@ -87,3 +87,28 @@ export async function markReadByClientIds(clientIds, at) {
     if (row && !row.readAt) await db.messages.update(row.localId, { readAt: at, deliveredAt: row.deliveredAt || at });
   }
 }
+
+// Delete only on this device.
+export async function deleteForMe(clientId) {
+  const row = await db.messages.where('clientId').equals(clientId).first();
+  if (row) await db.messages.delete(row.localId);
+}
+
+// Tombstone: replace content with "message deleted" (delete for everyone).
+export async function markDeleted(clientId, at) {
+  const row = await db.messages.where('clientId').equals(clientId).first();
+  if (row) {
+    await db.messages.update(row.localId, {
+      kind: 'deleted',
+      body: null,
+      mediaData: null,
+      viewOnce: false,
+      replyTo: null,
+      deletedAt: at || Date.now(),
+    });
+  }
+}
+
+export async function getMessageByClientId(clientId) {
+  return db.messages.where('clientId').equals(clientId).first();
+}

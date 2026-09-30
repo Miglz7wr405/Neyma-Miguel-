@@ -74,7 +74,7 @@ export function setTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
 }
 
-// Local profile (display name + avatar data URL), per this device.
+// My own profile (display name + avatar data URL), broadcast to the partner.
 const PROFILE_KEY = 'osp:profile';
 export function getProfile() {
   const s = localStorage.getItem(PROFILE_KEY);
@@ -82,4 +82,32 @@ export function getProfile() {
 }
 export function saveProfile(p) {
   localStorage.setItem(PROFILE_KEY, JSON.stringify({ ...getProfile(), ...p }));
+}
+
+// Partner's broadcast profile (name + avatar), received over the channel.
+const PARTNER_PROFILE_KEY = 'osp:partnerProfile';
+export function getPartnerProfile() {
+  const s = localStorage.getItem(PARTNER_PROFILE_KEY);
+  return s ? JSON.parse(s) : {};
+}
+export function savePartnerProfile(p) {
+  localStorage.setItem(PARTNER_PROFILE_KEY, JSON.stringify({ ...getPartnerProfile(), ...p }));
+}
+
+// Local nickname I gave the partner (like renaming a contact). Device-only.
+const ALIAS_KEY = 'osp:partnerAlias';
+export function getPartnerAlias() {
+  return localStorage.getItem(ALIAS_KEY) || '';
+}
+export function savePartnerAlias(name) {
+  if (name) localStorage.setItem(ALIAS_KEY, name);
+  else localStorage.removeItem(ALIAS_KEY);
+}
+
+// The name to show for the partner: my nickname > their broadcast name > default.
+export function partnerDisplayName(partner) {
+  return getPartnerAlias() || getPartnerProfile().name || partner.name;
+}
+export function myDisplayName(me) {
+  return getProfile().displayName || me.name;
 }
