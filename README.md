@@ -1,78 +1,53 @@
 # Our Sacred Place
 
-Um app privado de mensagens só para o Miguel e a Neyma. Estilo WhatsApp, mas em tom rosa, com bloqueio por senha a cada abertura, visualização única, status, áudio, foto, offline e instalável como PWA.
+App privado de mensagens só para o Miguel e a Neyma. Estilo WhatsApp, em tom rosa, com bloqueio por senha a cada abertura, visto/não visto, visualização única, status, áudio, foto, offline e instalável como PWA.
 
-## Utilizadores
+**Sem servidor. Sem Render. Sem nada para configurar.** É só abrir o link.
 
-Os dois logins são fixos (definidos em `server/src/users.ts`):
+## Como funciona (para curiosos)
+
+- **App**: só ficheiros estáticos (Vite + React), hospedados de graça no **GitHub Pages** deste repo.
+- **Mensagens**: viajam entre os dois telemóveis por um **broker MQTT público e gratuito** (sem contas), sempre **cifradas ponta-a-ponta** (AES-GCM). O broker nunca vê o conteúdo.
+- **Histórico**: guardado em cada telemóvel (IndexedDB). Ao voltarem a estar os dois online, sincroniza o que faltou.
+- **Media**: fotos comprimidas e áudios vão cifrados pelo próprio canal e ficam só no telemóvel. A visualização única apaga-se depois de vista.
+
+## Utilizadores (fixos, em `client/src/lib/config.js`)
 
 | Utilizador | Número | Palavra-passe |
 |---|---|---|
 | Miguel | `867272348` | `Neyma` |
 | Neyma  | `840532528` | `Miguel` |
 
-O app **pede a palavra-passe todas as vezes que abre**.
+O app pede a palavra-passe **todas as vezes que abre**.
+
+## Link do app
+
+Depois do deploy automático (GitHub Actions → Pages):
+
+**https://miglz7wr405.github.io/Neyma-Miguel-/**
+
+Abrir no Chrome do telemóvel → menu ⋮ → **Adicionar ao ecrã principal** → fica o ícone rosa `OSP`.
 
 ## Desenvolvimento local
-
-Requer Node 18+.
 
 ```bash
 npm run install:all
 npm run dev
 ```
-
-- Cliente: http://localhost:5173
-- Servidor: http://localhost:3001
-
-O Vite faz proxy de `/api` e `/socket.io` para o servidor. Abre `http://localhost:5173` num navegador (Miguel) e noutro em janela anónima ou noutro dispositivo da mesma rede (Neyma).
-
-## Produção
-
-```bash
-npm run build
-npm start
-```
-
-O servidor Node passa a servir o build do Vite em `http://localhost:3001` (uma URL só para tudo).
-
-## Deploy no Render (recomendado)
-
-1. Faz push desta branch para o GitHub.
-2. Entra em https://render.com → **New +** → **Blueprint** → aponta para este repo.
-3. O ficheiro `render.yaml` cria o Web Service com disco persistente em `/data` (SQLite + ficheiros de mídia).
-4. Ao terminar o build a Render devolve uma URL `https://our-sacred-place.onrender.com` — abre no telemóvel dos dois.
-
-Para **instalar como app**: no Chrome do Android, abre a URL → menu ⋮ → **Adicionar ao ecrã principal** → aparece o ícone rosa `OSP`.
-
-## Deploy alternativo (Docker)
-
-```bash
-docker build -t osp .
-docker run -p 3001:3001 -v $(pwd)/data:/data osp
-```
-
-## Trocar as palavras-passe
-
-Edita `server/src/users.ts`, faz commit e re-deploy.
+Abre http://localhost:5173 em dois navegadores (ou um normal + um anónimo) e entra com cada conta.
 
 ## Funcionalidades
 
-- Texto, áudio (MediaRecorder), foto (câmera ou galeria)
-- Visualização única (foto apaga do servidor após primeira abertura)
+- Texto, áudio (segurar o microfone), foto (câmera/galeria)
+- Visualização única (apaga depois de vista)
 - Status estilo WhatsApp (expiram em 24h)
-- Ticks ✓ (enviado) → ✓✓ (entregue) → ✓✓ azuis (lido)
-- Fila offline: envia mensagens escritas sem internet assim que voltar a ligar
-- 3 temas: **Rosa Confidencial** (padrão), **Roxo Íntimo**, **Meia-Noite**
-- Personalização de perfil (nome apelidado, foto)
+- **Visto/não visto**: ✓ enviado · ✓✓ entregue · ✓✓ azul lido + "Visto às HH:MM"
+- "a escrever…" e online/offline
+- Fila offline: escreve sem internet, envia sozinho quando voltar
+- 3 temas: Rosa Confidencial, Roxo Íntimo, Meia-Noite
 - Bloqueio por senha em cada abertura
 
-## Estrutura
+## Notas
 
-```
-/                 monorepo raiz
-├── server/       Node.js + Express + Socket.IO + SQLite
-├── client/       Vite + React + PWA
-├── render.yaml   deploy 1-clique
-└── Dockerfile    deploy alternativo
-```
+- O "correio" é um broker público gratuito, com várias reservas automáticas. As conversas vão sempre cifradas. Muito raramente pode haver instabilidade momentânea — reconecta sozinho.
+- Para trocar as palavras-passe: editar `client/src/lib/config.js` e fazer commit (o deploy refaz-se sozinho).

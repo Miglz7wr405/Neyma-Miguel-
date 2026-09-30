@@ -1,8 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
-import { getSocket, disconnectSocket } from '../lib/socket.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { createBus } from '../lib/mqtt.js';
 import { getUser, getPartner, logout as authLogout } from '../lib/auth.js';
-import { saveMessage, lastServerId, markConsumed, markReadUpTo, getMessages, drainOutbox, db as ldb } from '../lib/localdb.js';
-import { fetchMessagesSince } from '../lib/api.js';
+import {
+  saveMessage,
+  getMessages,
+  drainOutbox,
+  markConsumedByClientId,
+  markDeliveredByClientId,
+  markReadByClientIds,
+  saveStatus,
+  getActiveStatuses,
+  purgeOldStatuses,
+} from '../lib/localdb.js';
+import { buildSyncRequest, computeMissing } from '../lib/sync.js';
 import { IconChat, IconStatus, IconSettings } from '../lib/icons.jsx';
 import ChatScreen from './ChatScreen.jsx';
 import StatusScreen from './StatusScreen.jsx';
@@ -12,140 +22,116 @@ export default function MainScreen({ onLogout, onThemeChange }) {
   const me = getUser();
   const partner = getPartner();
   const [tab, setTab] = useState('chats');
-  const [online, setOnline] = useState(navigator.onLine);
+  const [online, setOnline] = useState(false);
   const [partnerOnline, setPartnerOnline] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
   const [messages, setMessages] = useState([]);
   const [statuses, setStatuses] = useState([]);
-  const [tick, setTick] = useState(0);
-  const socket = useMemo(() => getSocket(), []);
+  const messagesRef = useRef([]);
+  messagesRef.current = messages;
 
+  const bus = useMemo(() => createBus(me), [me.id]);
+
+  const refresh = async () => setMessages(await getMessages());
+
+  // Load local history + statuses immediately.
   useEffect(() => {
-    const onlineFn = () => setOnline(true);
-    const offlineFn = () => setOnline(false);
-    window.addEventListener('online', onlineFn);
-    window.addEventListener('offline', offlineFn);
-    return () => {
-      window.removeEventListener('online', onlineFn);
-      window.removeEventListener('offline', offlineFn);
-    };
+    refresh();
+    purgeOldStatuses().then(getActiveStatuses).then(setStatuses);
   }, []);
 
-  // Initial load: from local DB, then sync from server since lastId
   useEffect(() => {
-    (async () => {
-      const local = await getMessages();
-      setMessages(local);
-      const since = await lastServerId();
-      try {
-        const rows = await fetchMessagesSince(since);
-        for (const m of rows) {
-          await saveMessage({
-            id: m.id,
-            clientId: m.clientId,
-            from: m.from,
-            to: m.to,
-            kind: m.kind,
-            body: m.body,
-            mediaPath: m.mediaPath,
-            viewOnce: m.viewOnce,
-            consumed: m.consumed,
-            deliveredAt: m.deliveredAt,
-            readAt: m.readAt,
-            createdAt: m.createdAt,
-          });
-        }
-        setMessages(await getMessages());
-      } catch (e) {
-        console.warn('sync failed', e);
-      }
-    })();
-  }, [tick]);
+    const offs = [];
 
-  // Socket wiring
-  useEffect(() => {
-    const handleNew = async (m) => {
-      await saveMessage({ ...m });
-      setMessages(await getMessages());
-    };
-    const handleRead = async ({ upToId, readAt }) => {
-      await markReadUpTo(upToId, readAt);
-      setMessages(await getMessages());
-    };
-    const handleConsumed = async ({ id }) => {
-      await markConsumed(id);
-      setMessages(await getMessages());
-    };
-    const handlePresence = ({ user, online }) => {
-      if (user === partner.id) setPartnerOnline(!!online);
-    };
-    const handleStatusNew = (s) => {
-      setStatuses((prev) => [s, ...prev.filter((p) => p.id !== s.id)]);
-    };
-
-    socket.on('message:new', handleNew);
-    socket.on('message:read', handleRead);
-    socket.on('message:consumed', handleConsumed);
-    socket.on('presence', handlePresence);
-    socket.on('status:new', handleStatusNew);
-    socket.on('connect', () => setTick((v) => v + 1));
-
-    return () => {
-      socket.off('message:new', handleNew);
-      socket.off('message:read', handleRead);
-      socket.off('message:consumed', handleConsumed);
-      socket.off('presence', handlePresence);
-      socket.off('status:new', handleStatusNew);
-    };
-  }, [socket, partner.id]);
-
-  // Drain offline outbox when we come online
-  useEffect(() => {
-    if (!online || !socket.connected) return;
-    drainOutbox(async (item) => {
-      return new Promise((resolve, reject) => {
-        socket.emit('message:send', item, (ack) => {
-          if (ack?.ok) resolve();
-          else reject(new Error('ack failed'));
-        });
+    offs.push(bus.on('connect', async () => {
+      setOnline(true);
+      // Flush anything queued while offline.
+      await drainOutbox(async (item) => {
+        const ok = await bus.publishMessage(item);
+        if (!ok) throw new Error('offline');
       });
-    }).then(async () => setMessages(await getMessages()));
-  }, [online, socket, tick]);
+      await refresh();
+      // Ask the partner for anything we missed.
+      bus.publishCtrl(buildSyncRequest(messagesRef.current));
+    }));
+
+    offs.push(bus.on('disconnect', () => {
+      setOnline(false);
+      setPartnerOnline(false);
+    }));
+
+    offs.push(bus.on('message', async (m) => {
+      await saveMessage({ ...m, deliveredAt: null, readAt: null });
+      await refresh();
+      // Acknowledge delivery to the sender.
+      if (m.from === partner.id && m.clientId) {
+        bus.publishCtrl({ t: 'delivered', clientId: m.clientId });
+      }
+    }));
+
+    offs.push(bus.on('ctrl', async (c) => {
+      if (c.t === 'delivered' && c.clientId) {
+        await markDeliveredByClientId(c.clientId, Date.now());
+        await refresh();
+      } else if (c.t === 'read' && Array.isArray(c.clientIds)) {
+        await markReadByClientIds(c.clientIds, Date.now());
+        await refresh();
+      } else if (c.t === 'typing') {
+        setPartnerTyping(!!c.typing);
+      } else if (c.t === 'consumed' && c.clientId) {
+        await markConsumedByClientId(c.clientId);
+        await refresh();
+      } else if (c.t === 'sync-req') {
+        const missing = computeMissing(messagesRef.current, c);
+        for (const m of missing) {
+          // Re-send only our own authored messages the peer lacks.
+          if (m.from === me.id) bus.publishMessage(stripLocal(m));
+        }
+      }
+    }));
+
+    offs.push(bus.on('presence', (p) => {
+      if (p.user === partner.id) setPartnerOnline(!!p.online);
+    }));
+
+    offs.push(bus.on('status', async (s) => {
+      await saveStatus(s);
+      setStatuses((prev) => [s, ...prev.filter((x) => x.id !== s.id)]);
+    }));
+
+    bus.connect();
+    return () => {
+      offs.forEach((f) => f());
+      bus.destroy();
+    };
+  }, [bus, me.id, partner.id]);
 
   const logout = () => {
-    disconnectSocket();
+    bus.destroy();
     authLogout();
     onLogout();
   };
 
   return (
     <div className="screen">
-      {!online && <div className="offline-banner">Sem ligação — vais enviar quando voltar</div>}
+      {!online && <div className="offline-banner">Sem ligação — as mensagens vão quando voltar a internet</div>}
       {tab === 'chats' && (
         <ChatScreen
           me={me}
           partner={partner}
           partnerOnline={partnerOnline}
+          partnerTyping={partnerTyping}
           messages={messages}
-          setMessages={setMessages}
-          socket={socket}
+          refresh={refresh}
+          bus={bus}
           online={online}
         />
       )}
       {tab === 'status' && (
-        <StatusScreen
-          me={me}
-          partner={partner}
-          statuses={statuses}
-          setStatuses={setStatuses}
-          socket={socket}
-        />
+        <StatusScreen me={me} partner={partner} statuses={statuses} setStatuses={setStatuses} bus={bus} />
       )}
       {tab === 'settings' && (
-        <SettingsScreen
-          me={me}
-          onLogout={logout}
-          onThemeChange={onThemeChange}
-        />
+        <SettingsScreen me={me} onLogout={logout} onThemeChange={onThemeChange} />
       )}
       <nav className="bottom-nav">
         <button className={tab === 'chats' ? 'active' : ''} onClick={() => setTab('chats')}>
@@ -160,4 +146,10 @@ export default function MainScreen({ onLogout, onThemeChange }) {
       </nav>
     </div>
   );
+}
+
+// Remove device-local bookkeeping before re-broadcasting during sync.
+function stripLocal(m) {
+  const { localId, deliveredAt, readAt, ...rest } = m;
+  return rest;
 }

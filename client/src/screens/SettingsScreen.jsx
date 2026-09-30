@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getTheme, setTheme } from '../lib/auth.js';
-import { updateProfile } from '../lib/api.js';
+import { getTheme, setTheme, getProfile, saveProfile } from '../lib/auth.js';
 
 const THEMES = [
   { id: 'rose', name: 'Rosa Confidencial', color: '#e91e63' },
@@ -10,7 +9,7 @@ const THEMES = [
 
 export default function SettingsScreen({ me, onLogout, onThemeChange }) {
   const [themeId, setThemeId] = useState(getTheme());
-  const [displayName, setDisplayName] = useState('');
+  const [displayName, setDisplayName] = useState(getProfile().displayName || '');
   const [savedToast, setSavedToast] = useState(false);
   const [installEvent, setInstallEvent] = useState(null);
 
@@ -29,8 +28,8 @@ export default function SettingsScreen({ me, onLogout, onThemeChange }) {
     onThemeChange?.();
   }
 
-  async function saveProfile() {
-    await updateProfile(displayName || null);
+  function handleSaveProfile() {
+    saveProfile({ displayName: displayName || null });
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 1500);
   }
@@ -64,7 +63,7 @@ export default function SettingsScreen({ me, onLogout, onThemeChange }) {
             onChange={(e) => setDisplayName(e.target.value)}
             style={{ flex: 1, background: 'transparent', outline: 'none', fontSize: 15 }}
           />
-          <button className="btn-primary" style={{ padding: '8px 14px' }} onClick={saveProfile}>
+          <button className="btn-primary" style={{ padding: '8px 14px' }} onClick={handleSaveProfile}>
             Guardar
           </button>
         </div>

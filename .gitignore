@@ -5,10 +5,6 @@ build/
 *.log
 npm-debug.log*
 
-# Server runtime data
-server/data/
-data/
-
 # Env
 .env
 .env.local

@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { newClientId, saveMessage, enqueue, getMessages } from '../lib/localdb.js';
-import { uploadFile, mediaUrl } from '../lib/api.js';
-import { recordAudio, pickFile, capturePhoto } from '../lib/media.js';
+import { newClientId, saveMessage, enqueue, getMessages, markConsumedByClientId } from '../lib/localdb.js';
+import { compressImage, recordAudio, pickFile, capturePhoto } from '../lib/media.js';
 import { IconSend, IconMic, IconAttach, IconCamera, IconImage, IconEye, IconTick, IconDoubleTick, IconClose } from '../lib/icons.jsx';
 
 function fmtTime(ts) {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 function fmtDay(ts) {
   const d = new Date(ts);
@@ -32,28 +30,23 @@ function ViewOnceModal({ src, onClose }) {
   );
 }
 
-function Bubble({ msg, me, onOpenViewOnce }) {
+function Bubble({ msg, me, partner, onOpenViewOnce }) {
   const mine = msg.from === me.id;
   const cls = `bubble ${mine ? 'me' : 'them'}`;
+  const foot = (
+    <span className="foot">
+      {fmtTime(msg.createdAt)}
+      {mine && <TickIndicator msg={msg} />}
+    </span>
+  );
   if (msg.kind === 'text') {
-    return (
-      <div className={cls}>
-        {msg.body}
-        <span className="foot">
-          {fmtTime(msg.createdAt)}
-          {mine && <TickIndicator msg={msg} />}
-        </span>
-      </div>
-    );
+    return <div className={cls}>{msg.body}{foot}</div>;
   }
   if (msg.kind === 'audio') {
     return (
       <div className={cls}>
-        <audio controls src={mediaUrl(msg.mediaPath)} preload="metadata"></audio>
-        <span className="foot">
-          {fmtTime(msg.createdAt)}
-          {mine && <TickIndicator msg={msg} />}
-        </span>
+        <audio controls src={msg.mediaData} preload="metadata"></audio>
+        {foot}
       </div>
     );
   }
@@ -63,89 +56,74 @@ function Bubble({ msg, me, onOpenViewOnce }) {
       return (
         <div
           className={`bubble viewonce ${msg.consumed ? 'consumed' : ''}`}
-          onClick={() => canOpen && onOpenViewOnce(mediaUrl(msg.mediaPath), msg.id)}
+          onClick={() => canOpen && onOpenViewOnce(msg)}
         >
           {msg.consumed
-            ? mine ? 'Foto vista pela Neyma' : 'Foto vista'
+            ? mine ? `Foto vista pela ${partner.name}` : 'Foto vista'
             : mine ? 'Foto de visualização única — enviada' : '📷 Toca para ver uma vez'}
-          <span className="foot">
-            {fmtTime(msg.createdAt)}
-            {mine && <TickIndicator msg={msg} />}
-          </span>
+          {foot}
         </div>
       );
     }
     return (
       <div className={cls}>
-        <img className="msg-img" src={mediaUrl(msg.mediaPath)} alt="" />
-        <span className="foot">
-          {fmtTime(msg.createdAt)}
-          {mine && <TickIndicator msg={msg} />}
-        </span>
+        <img className="msg-img" src={msg.mediaData} alt="" />
+        {foot}
       </div>
     );
   }
   return null;
 }
 
-export default function ChatScreen({ me, partner, partnerOnline, messages, setMessages, socket, online }) {
+// Fields that travel over the wire (no device-local bookkeeping).
+function forWire(m) {
+  const { localId, deliveredAt, readAt, ...rest } = m;
+  return rest;
+}
+
+export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, messages, refresh, bus, online }) {
   const [text, setText] = useState('');
   const [attachOpen, setAttachOpen] = useState(false);
-  const [recording, setRecording] = useState(null);
+  const [recording, setRecording] = useState(false);
   const [viewOnceSrc, setViewOnceSrc] = useState(null);
-  const [typing, setTyping] = useState(false);
   const [toast, setToast] = useState(null);
   const bodyRef = useRef(null);
+  const recRef = useRef(null);
   const typingTimer = useRef(null);
+  const ackedRead = useRef(new Set());
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [messages]);
+  }, [messages, partnerTyping]);
 
+  // Tell the partner we've read their messages (chat is open).
   useEffect(() => {
-    const onTyping = ({ user, typing }) => {
-      if (user === partner.id) setTyping(!!typing);
-    };
-    socket.on('typing', onTyping);
-    return () => socket.off('typing', onTyping);
-  }, [socket, partner.id]);
-
-  // Mark partner's messages as read while chat is open
-  useEffect(() => {
-    const unread = messages.filter((m) => m.from === partner.id && !m.readAt && m.id);
-    if (!unread.length) return;
-    const upToId = Math.max(...unread.map((m) => m.id));
-    socket.emit('message:read', { upToId });
-  }, [messages, socket, partner.id]);
+    const toAck = messages.filter(
+      (m) => m.from === partner.id && m.clientId && !ackedRead.current.has(m.clientId),
+    );
+    if (toAck.length && bus.isConnected()) {
+      toAck.forEach((m) => ackedRead.current.add(m.clientId));
+      bus.publishCtrl({ t: 'read', clientIds: toAck.map((m) => m.clientId) });
+    }
+  }, [messages, bus, partner.id]);
 
   function showToast(t) {
     setToast(t);
-    setTimeout(() => setToast(null), 1600);
+    setTimeout(() => setToast(null), 1800);
   }
 
   async function sendPayload(payload) {
     const clientId = newClientId();
-    const optimistic = {
-      clientId,
-      from: me.id,
-      to: partner.id,
-      createdAt: Date.now(),
-      deliveredAt: null,
-      readAt: null,
-      consumed: false,
-      ...payload,
+    const msg = {
+      clientId, from: me.id, to: partner.id, createdAt: Date.now(),
+      deliveredAt: null, readAt: null, consumed: false, ...payload,
     };
-    await saveMessage(optimistic);
-    setMessages(await getMessages());
-    if (online && socket.connected) {
-      socket.emit('message:send', { clientId, ...payload }, async (ack) => {
-        if (ack?.ok && ack.message) {
-          await saveMessage({ ...ack.message });
-          setMessages(await getMessages());
-        }
-      });
+    await saveMessage(msg);
+    await refresh();
+    if (online && bus.isConnected()) {
+      await bus.publishMessage(forWire(msg));
     } else {
-      await enqueue({ clientId, ...payload });
+      await enqueue(forWire(msg));
       showToast('Guardado — envia quando ligares os dados');
     }
   }
@@ -155,113 +133,100 @@ export default function ChatScreen({ me, partner, partnerOnline, messages, setMe
     if (!body) return;
     sendPayload({ kind: 'text', body });
     setText('');
-    socket.emit('typing', { typing: false });
+    bus.publishCtrl({ t: 'typing', typing: false });
   }
 
-  async function handlePickImage(viewOnce) {
+  async function handleImage(fromCamera, viewOnce) {
     setAttachOpen(false);
-    const f = await pickFile('image/*');
+    const f = fromCamera ? await capturePhoto() : await pickFile('image/*');
     if (!f) return;
     try {
-      const { mediaPath } = await uploadFile(f);
-      sendPayload({ kind: 'photo', mediaPath, viewOnce: !!viewOnce });
-    } catch (e) {
-      showToast('Falha ao enviar foto (precisa de estar online)');
-    }
-  }
-  async function handleCamera(viewOnce) {
-    setAttachOpen(false);
-    const f = await capturePhoto();
-    if (!f) return;
-    try {
-      const { mediaPath } = await uploadFile(f);
-      sendPayload({ kind: 'photo', mediaPath, viewOnce: !!viewOnce });
+      const mediaData = await compressImage(f);
+      sendPayload({ kind: 'photo', mediaData, viewOnce: !!viewOnce });
     } catch {
-      showToast('Falha ao enviar (precisa de estar online)');
+      showToast('Não consegui preparar a foto');
     }
   }
 
-  async function handleMicDown() {
+  async function startRec() {
     try {
-      const rec = await recordAudio();
-      setRecording(rec);
+      recRef.current = await recordAudio();
+      setRecording(true);
     } catch {
       showToast('Sem acesso ao microfone');
     }
   }
-  async function handleMicUp() {
-    if (!recording) return;
-    const file = await recording.stop();
-    setRecording(null);
-    try {
-      const { mediaPath } = await uploadFile(file);
-      sendPayload({ kind: 'audio', mediaPath });
-    } catch {
-      showToast('Falha ao enviar áudio (precisa de estar online)');
-    }
+  async function stopRec() {
+    if (!recRef.current) return;
+    const mediaData = await recRef.current.stop();
+    recRef.current = null;
+    setRecording(false);
+    sendPayload({ kind: 'audio', mediaData });
   }
-  function handleMicCancel() {
-    recording?.cancel();
-    setRecording(null);
+  function cancelRec() {
+    recRef.current?.cancel();
+    recRef.current = null;
+    setRecording(false);
+  }
+
+  function openViewOnce(msg) {
+    setViewOnceSrc(msg.mediaData);
+    markConsumedByClientId(msg.clientId).then(refresh);
+    bus.publishCtrl({ t: 'consumed', clientId: msg.clientId });
   }
 
   function onTextChange(v) {
     setText(v);
-    if (!typingTimer.current) {
-      socket.emit('typing', { typing: true });
-    }
+    if (!typingTimer.current) bus.publishCtrl({ t: 'typing', typing: true });
     clearTimeout(typingTimer.current);
     typingTimer.current = setTimeout(() => {
-      socket.emit('typing', { typing: false });
+      bus.publishCtrl({ t: 'typing', typing: false });
       typingTimer.current = null;
     }, 1200);
   }
 
-  const grouped = [];
+  // Build render list with day dividers.
+  const rows = [];
   let lastDay = '';
   for (const m of messages) {
     const d = fmtDay(m.createdAt);
-    if (d !== lastDay) {
-      grouped.push({ divider: d, key: `d-${d}-${m.createdAt}` });
-      lastDay = d;
-    }
-    grouped.push({ msg: m, key: `m-${m.localId || m.clientId || m.id}` });
+    if (d !== lastDay) { rows.push({ divider: d, key: `d-${d}-${m.createdAt}` }); lastDay = d; }
+    rows.push({ msg: m, key: `m-${m.localId || m.clientId}` });
   }
-
-  const displayName = partner.name;
+  const lastMine = [...messages].reverse().find((m) => m.from === me.id);
+  const seenLabel = lastMine?.readAt ? `Visto às ${fmtTime(lastMine.readAt)}` : null;
 
   return (
     <>
       <header className="header">
-        <div className="avatar">{displayName[0]}</div>
+        <div className="avatar">{partner.name[0]}</div>
         <div style={{ flex: 1 }}>
-          <h1 style={{ margin: 0 }}>{displayName}</h1>
+          <h1 style={{ margin: 0 }}>{partner.name}</h1>
           <p className="sub">
-            {typing ? 'A escrever…' : partnerOnline ? 'online' : 'offline'}
+            {partnerTyping ? 'a escrever…' : partnerOnline ? 'online' : 'offline'}
           </p>
         </div>
       </header>
       <div className="chat-body" ref={bodyRef}>
-        {grouped.map((row) =>
+        {rows.map((row) =>
           row.divider ? (
             <div key={row.key} className="day-divider">{row.divider}</div>
           ) : (
-            <Bubble key={row.key} msg={row.msg} me={me} onOpenViewOnce={(src) => setViewOnceSrc(src)} />
+            <Bubble key={row.key} msg={row.msg} me={me} partner={partner} onOpenViewOnce={openViewOnce} />
           ),
         )}
+        {seenLabel && <div style={{ alignSelf: 'flex-end', fontSize: 11, color: 'var(--tick-read)', padding: '2px 6px' }}>{seenLabel}</div>}
       </div>
       {attachOpen && (
         <div className="attach-menu" onMouseLeave={() => setAttachOpen(false)}>
-          <button onClick={() => handleCamera(false)}><IconCamera /> Câmera</button>
-          <button onClick={() => handlePickImage(false)}><IconImage /> Galeria</button>
-          <button onClick={() => handleCamera(true)}><IconEye /> Câmera 1×</button>
-          <button onClick={() => handlePickImage(true)}><IconEye /> Foto 1×</button>
+          <button onClick={() => handleImage(true, false)}><IconCamera /> Câmera</button>
+          <button onClick={() => handleImage(false, false)}><IconImage /> Galeria</button>
+          <button onClick={() => handleImage(true, true)}><IconEye /> Câmera 1×</button>
+          <button onClick={() => handleImage(false, true)}><IconEye /> Foto 1×</button>
         </div>
       )}
       <div className="composer">
-        <button className="icon-btn" onClick={() => setAttachOpen((v) => !v)}>
-          <IconAttach />
-        </button>
+        <button className="icon-btn" onClick={() => setAttachOpen((v) => !v)}><IconAttach /></button>
         <div className="field">
           <textarea
             rows={1}
@@ -269,25 +234,20 @@ export default function ChatScreen({ me, partner, partnerOnline, messages, setMe
             value={text}
             onChange={(e) => onTextChange(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendText();
-              }
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText(); }
             }}
           />
         </div>
         {text.trim() ? (
-          <button className="send-btn" onClick={handleSendText}>
-            <IconSend />
-          </button>
+          <button className="send-btn" onClick={handleSendText}><IconSend /></button>
         ) : (
           <button
             className={`send-btn ${recording ? 'recording' : ''}`}
-            onMouseDown={handleMicDown}
-            onMouseUp={handleMicUp}
-            onMouseLeave={handleMicCancel}
-            onTouchStart={(e) => { e.preventDefault(); handleMicDown(); }}
-            onTouchEnd={(e) => { e.preventDefault(); handleMicUp(); }}
+            onMouseDown={startRec}
+            onMouseUp={stopRec}
+            onMouseLeave={() => recording && cancelRec()}
+            onTouchStart={(e) => { e.preventDefault(); startRec(); }}
+            onTouchEnd={(e) => { e.preventDefault(); stopRec(); }}
           >
             <IconMic />
           </button>

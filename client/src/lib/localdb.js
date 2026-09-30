@@ -56,16 +56,34 @@ export async function drainOutbox(sendFn) {
   }
 }
 
-export async function markConsumed(id) {
-  const row = await db.messages.where('id').equals(id).first();
-  if (row) await db.messages.update(row.localId, { consumed: true });
+const DAY = 24 * 60 * 60 * 1000;
+export async function saveStatus(s) {
+  await db.statuses.put(s);
+}
+export async function getActiveStatuses() {
+  const cut = Date.now() - DAY;
+  const all = await db.statuses.toArray();
+  return all.filter((s) => s.createdAt > cut).sort((a, b) => a.createdAt - b.createdAt);
+}
+export async function purgeOldStatuses() {
+  const cut = Date.now() - DAY;
+  const all = await db.statuses.toArray();
+  for (const s of all) if (s.createdAt <= cut) await db.statuses.delete(s.id);
 }
 
-export async function markReadUpTo(upToId, readAt) {
-  const rows = await db.messages.toArray();
-  for (const r of rows) {
-    if (r.id && r.id <= upToId && !r.readAt) {
-      await db.messages.update(r.localId, { readAt });
-    }
+export async function markConsumedByClientId(clientId) {
+  const row = await db.messages.where('clientId').equals(clientId).first();
+  if (row) await db.messages.update(row.localId, { consumed: true, mediaData: null });
+}
+
+export async function markDeliveredByClientId(clientId, at) {
+  const row = await db.messages.where('clientId').equals(clientId).first();
+  if (row && !row.deliveredAt) await db.messages.update(row.localId, { deliveredAt: at });
+}
+
+export async function markReadByClientIds(clientIds, at) {
+  for (const cid of clientIds) {
+    const row = await db.messages.where('clientId').equals(cid).first();
+    if (row && !row.readAt) await db.messages.update(row.localId, { readAt: at, deliveredAt: row.deliveredAt || at });
   }
 }
