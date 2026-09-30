@@ -27,3 +27,7 @@ export const IconPin = () => <svg {...p}><path d="M21 10c0 7-9 12-9 12s-9-5-9-12
 export const IconDownload = () => <svg {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>;
 export const IconPlay = () => <svg {...p} width="18" height="18"><path d="M6 4l14 8-14 8z" fill="currentColor" stroke="none"/></svg>;
 export const IconContact = () => <svg {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>;
+export const IconCrop = () => <svg {...p}><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg>;
+export const IconText = () => <svg {...p}><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg>;
+export const IconRotate = () => <svg {...p}><path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>;
+export const IconCheck = () => <svg {...p}><path d="M20 6 9 17l-5-5"/></svg>;

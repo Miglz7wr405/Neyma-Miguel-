@@ -4,8 +4,9 @@ import {
   markConsumedByClientId, deleteForMe, markDeleted,
 } from '../lib/localdb.js';
 import {
-  compressImage, recordAudio, pickFile, capturePhoto, fileToDataURL, getLocation, humanSize,
+  recordAudio, pickFile, capturePhoto, pickImages, fileToDataURL, getLocation, humanSize,
 } from '../lib/media.js';
+import ImageEditor from '../components/ImageEditor.jsx';
 import { partnerDisplayName, getPartnerProfile, getProfile, savePartnerAlias } from '../lib/auth.js';
 import {
   IconSend, IconMic, IconAttach, IconCamera, IconImage, IconEye, IconTick, IconDoubleTick,
@@ -27,7 +28,7 @@ function fmtDay(ts) {
 function previewOf(m) {
   if (m.kind === 'text') return m.body;
   if (m.kind === 'audio') return '🎙️ Mensagem de voz';
-  if (m.kind === 'photo') return m.viewOnce ? '📷 Foto' : '📷 Foto';
+  if (m.kind === 'photo') return m.caption || '📷 Foto';
   if (m.kind === 'document') return `📄 ${m.body || 'Documento'}`;
   if (m.kind === 'location') return '📍 Localização';
   return '';
@@ -122,7 +123,7 @@ function Bubble({ msg, me, partner, onOpenViewOnce, onReply, onLongPress, onJump
         </div>
       );
     }
-    inner = <><img className="msg-img" src={msg.mediaData} alt="" />{foot}</>;
+    inner = <><img className="msg-img" src={msg.mediaData} alt="" />{msg.caption ? <div className="msg-caption">{msg.caption}</div> : null}{foot}</>;
   } else if (msg.kind === 'document') {
     inner = (
       <a className="doc-card" href={msg.mediaData} download={msg.body || 'ficheiro'} onClick={(e) => e.stopPropagation()}>
@@ -175,6 +176,8 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
   const [voArmed, setVoArmed] = useState(false); // next media = view-once
   const [viewOnceSrc, setViewOnceSrc] = useState(null);
   const [voAudio, setVoAudio] = useState(null); // playing view-once audio src
+  const [editorFiles, setEditorFiles] = useState(null);
+  const [editorVO, setEditorVO] = useState(false);
   const [toast, setToast] = useState(null);
   const [replyTarget, setReplyTarget] = useState(null);
   const [menuMsg, setMenuMsg] = useState(null);
@@ -236,12 +239,17 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
 
   async function handleImage(fromCamera, viewOnce) {
     setAttachOpen(false);
-    const f = fromCamera ? await capturePhoto() : await pickFile('image/*');
-    if (!f) return;
-    try {
-      const mediaData = await compressImage(f);
-      sendPayload({ kind: 'photo', mediaData, viewOnce: !!viewOnce });
-    } catch { showToast('Não consegui preparar a foto'); }
+    const files = fromCamera ? [await capturePhoto()].filter(Boolean) : await pickImages();
+    if (!files || !files.length) return;
+    setEditorVO(!!viewOnce);
+    setEditorFiles(files);
+  }
+
+  async function handleEditorSend(list) {
+    setEditorFiles(null);
+    for (const it of list) {
+      await sendPayload({ kind: 'photo', mediaData: it.dataURL, viewOnce: it.viewOnce, caption: it.caption || null });
+    }
   }
 
   async function handleDocument() {
@@ -474,6 +482,14 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
             <button className="btn-ghost" onClick={() => setVoAudio(null)}>Fechar</button>
           </div>
         </div>
+      )}
+      {editorFiles && (
+        <ImageEditor
+          files={editorFiles}
+          startViewOnce={editorVO}
+          onCancel={() => setEditorFiles(null)}
+          onSend={handleEditorSend}
+        />
       )}
       {toast && <div className="toast">{toast}</div>}
     </>

@@ -22,6 +22,27 @@ export function capturePhoto() {
   });
 }
 
+// Opens the system gallery picker allowing MULTIPLE images.
+export function pickImages() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.multiple = true;
+    input.onchange = () => resolve(input.files ? Array.from(input.files) : []);
+    input.click();
+  });
+}
+
+export function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
 // Resize to <= maxDim and JPEG-compress; returns a data URL (small enough
 // to travel through the message channel).
 export function compressImage(file, maxDim = 1024, quality = 0.6) {

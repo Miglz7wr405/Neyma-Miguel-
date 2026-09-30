@@ -50,7 +50,7 @@ export default function MainScreen({ onLogout, onThemeChange }) {
   function previewFor(m) {
     if (m.kind === 'text') return m.body;
     if (m.kind === 'audio') return '🎙️ Mensagem de voz';
-    if (m.kind === 'photo') return '📷 Foto';
+    if (m.kind === 'photo') return m.caption || '📷 Foto';
     if (m.kind === 'document') return `📄 ${m.body || 'Documento'}`;
     if (m.kind === 'location') return '📍 Localização';
     return 'Nova mensagem';
