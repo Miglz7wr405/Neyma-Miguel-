@@ -22,10 +22,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install client deps
-        run: npm --prefix client install
+      - name: Install deps
+        run: npm install
       - name: Build
-        run: npm --prefix client run build
+        run: npm run build
       - name: Setup Pages (auto-enable)
         uses: actions/configure-pages@v5
         with:
@@ -33,7 +33,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: client/dist
+          path: dist
 
   deploy:
     needs: build

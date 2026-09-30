@@ -20,18 +20,18 @@ App privado de mensagens só para o Miguel e a Neyma. Estilo WhatsApp, em tom ro
 
 O app pede a palavra-passe **todas as vezes que abre**.
 
-## Link do app
+## Deploy na Vercel (recomendado)
 
-Depois do deploy automático (GitHub Actions → Pages):
-
-**https://miglz7wr405.github.io/Neyma-Miguel-/**
-
-Abrir no Chrome do telemóvel → menu ⋮ → **Adicionar ao ecrã principal** → fica o ícone rosa `OSP`.
+1. Entra em https://vercel.com com a tua conta GitHub.
+2. **Add New… → Project** → importa o repo `Neyma-Miguel-`.
+3. Não mexas em nada (a Vercel deteta Vite sozinha) → **Deploy**.
+4. Ficas com um link `https://<nome>.vercel.app`. Abre nos dois telemóveis →
+   menu ⋮ → **Adicionar ao ecrã principal** → ícone rosa `OSP`.
 
 ## Desenvolvimento local
 
 ```bash
-npm run install:all
+npm install
 npm run dev
 ```
 Abre http://localhost:5173 em dois navegadores (ou um normal + um anónimo) e entra com cada conta.

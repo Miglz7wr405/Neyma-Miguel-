@@ -1,15 +1,23 @@
 {
   "name": "our-sacred-place",
-  "private": true,
   "version": "2.0.0",
-  "description": "Private WhatsApp-style PWA for two people. No server, no setup.",
-  "engines": {
-    "node": ">=18"
-  },
+  "private": true,
+  "type": "module",
   "scripts": {
-    "install:all": "npm install && npm --prefix client install",
-    "dev": "npm --prefix client run dev",
-    "build": "npm --prefix client run build",
-    "preview": "npm --prefix client run preview"
+    "dev": "vite",
+    "prebuild": "node scripts/gen-icons.mjs",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "dexie": "^4.0.8",
+    "mqtt": "^5.10.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.2",
+    "vite-plugin-pwa": "^0.20.5"
   }
 }
