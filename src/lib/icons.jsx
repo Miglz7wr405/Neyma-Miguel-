@@ -31,3 +31,4 @@ export const IconCrop = () => <svg {...p}><path d="M6 2v14a2 2 0 0 0 2 2h14"/><p
 export const IconText = () => <svg {...p}><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg>;
 export const IconRotate = () => <svg {...p}><path d="M23 4v6h-6"/><path d="M20.5 15a9 9 0 1 1-2.1-9.4L23 10"/></svg>;
 export const IconCheck = () => <svg {...p}><path d="M20 6 9 17l-5-5"/></svg>;
+export const IconGame = () => <svg {...p}><path d="M6 11h4M8 9v4"/><circle cx="15" cy="10" r="1"/><circle cx="17.5" cy="12.5" r="1"/><path d="M17.5 5H6.5A4.5 4.5 0 0 0 2 9.5v5A4.5 4.5 0 0 0 6.5 19c1.5 0 2.3-.6 3-1.3l.8-.9a2 2 0 0 1 3.4 0l.8.9c.7.7 1.5 1.3 3 1.3A4.5 4.5 0 0 0 22 14.5v-5A4.5 4.5 0 0 0 17.5 5z"/></svg>;

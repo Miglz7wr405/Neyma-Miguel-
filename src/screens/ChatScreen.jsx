@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, memo, useCallback, lazy, Suspense } from 'react';
 import {
   newClientId, saveMessage, enqueue, getMessages,
   markConsumedByClientId, deleteForMe, markDeleted,
@@ -6,12 +6,15 @@ import {
 import {
   recordAudio, pickFile, capturePhoto, pickImages, fileToDataURL, getLocation, humanSize,
 } from '../lib/media.js';
-import ImageEditor from '../components/ImageEditor.jsx';
-import { partnerDisplayName, getPartnerProfile, getProfile, savePartnerAlias } from '../lib/auth.js';
+import Composer from '../components/Composer.jsx';
+import PhotoViewer from '../components/PhotoViewer.jsx';
+import { partnerDisplayName, getPartnerProfile, savePartnerAlias } from '../lib/auth.js';
 import {
-  IconSend, IconMic, IconAttach, IconCamera, IconImage, IconEye, IconTick, IconDoubleTick,
+  IconCamera, IconImage, IconEye, IconTick, IconDoubleTick,
   IconClose, IconReply, IconTrash, IconCopy, IconPencil, IconDoc, IconPin, IconPlay,
 } from '../lib/icons.jsx';
+
+const ImageEditor = lazy(() => import('../components/ImageEditor.jsx'));
 
 function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -40,9 +43,9 @@ function TickIndicator({ msg }) {
   return <span className="tick"><IconTick /></span>;
 }
 
-function Quoted({ reply, me, partner, onJump }) {
+function Quoted({ reply, me, partnerName, onJump }) {
   if (!reply) return null;
-  const who = reply.from === me.id ? 'Tu' : partnerDisplayName(partner);
+  const who = reply.from === me.id ? 'Tu' : partnerName;
   return (
     <div className="quoted" onClick={(e) => { e.stopPropagation(); onJump?.(reply.clientId); }}>
       <div className="quoted-who">{who}</div>
@@ -51,12 +54,13 @@ function Quoted({ reply, me, partner, onJump }) {
   );
 }
 
-function Bubble({ msg, me, partner, onOpenViewOnce, onReply, onLongPress, onJump, onPlayVoiceOnce, refAttr }) {
+const Bubble = memo(function Bubble({ msg, me, partnerName, onOpenViewOnce, onReply, onLongPress, onJump, onPlayVoiceOnce, registerRef }) {
   const mine = msg.from === me.id;
   const [dx, setDx] = useState(0);
   const start = useRef(null);
   const moved = useRef(false);
   const lpTimer = useRef(null);
+  const setRef = (el) => registerRef(msg.clientId, el);
 
   function down(x, y) {
     start.current = { x, y };
@@ -89,7 +93,7 @@ function Bubble({ msg, me, partner, onOpenViewOnce, onReply, onLongPress, onJump
   if (msg.kind === 'deleted') {
     inner = <span className="deleted-msg">🚫 Esta mensagem foi apagada</span>;
   } else if (msg.kind === 'text') {
-    inner = <>{msg.body}{foot}</>;
+    inner = <><span className="msg-text">{msg.body}</span>{foot}</>;
   } else if (msg.kind === 'audio') {
     if (msg.viewOnce) {
       const canPlay = !msg.consumed && !mine;
@@ -101,13 +105,13 @@ function Bubble({ msg, me, partner, onOpenViewOnce, onReply, onLongPress, onJump
           </div>
         );
     } else {
-      inner = <><audio controls src={msg.mediaData} preload="metadata"></audio>{foot}</>;
+      inner = <><audio controls src={msg.mediaData} preload="none"></audio>{foot}</>;
     }
   } else if (msg.kind === 'photo') {
     if (msg.viewOnce) {
       const canOpen = !msg.consumed && !mine;
       return (
-        <div ref={refAttr} className="bubble-wrap" style={{ transform: `translateX(${dx}px)` }}
+        <div ref={setRef} className="bubble-wrap" style={{ transform: `translateX(${dx}px)` }}
           onTouchStart={(e) => down(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchMove={(e) => move(e.touches[0].clientX, e.touches[0].clientY)}
           onTouchEnd={up}
@@ -116,14 +120,14 @@ function Bubble({ msg, me, partner, onOpenViewOnce, onReply, onLongPress, onJump
           <div className={`bubble viewonce ${msg.consumed ? 'consumed' : ''}`}
             onClick={() => canOpen && onOpenViewOnce(msg)}>
             {msg.consumed
-              ? (mine ? `Foto vista pela ${partnerDisplayName(partner)}` : 'Foto vista')
+              ? (mine ? `Foto vista pela ${partnerName}` : 'Foto vista')
               : (mine ? 'Foto de visualização única — enviada' : '📷 Toca para ver uma vez')}
             {foot}
           </div>
         </div>
       );
     }
-    inner = <><img className="msg-img" src={msg.mediaData} alt="" />{msg.caption ? <div className="msg-caption">{msg.caption}</div> : null}{foot}</>;
+    inner = <><img className="msg-img" src={msg.mediaData} alt="" loading="lazy" decoding="async" />{msg.caption ? <div className="msg-caption">{msg.caption}</div> : null}{foot}</>;
   } else if (msg.kind === 'document') {
     inner = (
       <a className="doc-card" href={msg.mediaData} download={msg.body || 'ficheiro'} onClick={(e) => e.stopPropagation()}>
@@ -150,19 +154,29 @@ function Bubble({ msg, me, partner, onOpenViewOnce, onReply, onLongPress, onJump
   }
 
   return (
-    <div ref={refAttr} className="bubble-wrap" style={{ transform: `translateX(${dx}px)` }}
+    <div ref={setRef} className="bubble-wrap" style={{ transform: `translateX(${dx}px)` }}
       onTouchStart={(e) => down(e.touches[0].clientX, e.touches[0].clientY)}
       onTouchMove={(e) => move(e.touches[0].clientX, e.touches[0].clientY)}
       onTouchEnd={up}
       onContextMenu={(e) => { e.preventDefault(); onLongPress?.(msg); }}>
       {dx > 10 && <span className="swipe-reply"><IconReply /></span>}
       <div className={cls}>
-        {msg.replyTo && msg.kind !== 'deleted' && <Quoted reply={msg.replyTo} me={me} partner={partner} onJump={onJump} />}
+        {msg.replyTo && msg.kind !== 'deleted' && <Quoted reply={msg.replyTo} me={me} partnerName={partnerName} onJump={onJump} />}
         {inner}
       </div>
     </div>
   );
-}
+}, (a, b) => {
+  const x = a.msg, y = b.msg;
+  return a.partnerName === b.partnerName &&
+    x.localId === y.localId && x.deliveredAt === y.deliveredAt &&
+    x.readAt === y.readAt && x.consumed === y.consumed &&
+    x.kind === y.kind && x.body === y.body && x.caption === y.caption &&
+    x.mediaData === y.mediaData && x.replyTo === y.replyTo &&
+    a.onReply === b.onReply && a.onLongPress === b.onLongPress &&
+    a.onJump === b.onJump && a.onOpenViewOnce === b.onOpenViewOnce &&
+    a.onPlayVoiceOnce === b.onPlayVoiceOnce && a.registerRef === b.registerRef;
+});
 
 function forWire(m) {
   const { localId, deliveredAt, readAt, ...rest } = m;
@@ -170,7 +184,6 @@ function forWire(m) {
 }
 
 export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, messages, refresh, bus, online, onProfileChanged }) {
-  const [text, setText] = useState('');
   const [attachOpen, setAttachOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voArmed, setVoArmed] = useState(false); // next media = view-once
@@ -183,9 +196,10 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
   const [menuMsg, setMenuMsg] = useState(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [aliasInput, setAliasInput] = useState('');
+  const [visibleCount, setVisibleCount] = useState(50);
+  const [showPartnerPhoto, setShowPartnerPhoto] = useState(false);
   const bodyRef = useRef(null);
   const recRef = useRef(null);
-  const typingTimer = useRef(null);
   const ackedRead = useRef(new Set());
   const bubbleRefs = useRef({});
 
@@ -227,14 +241,6 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
       await enqueue(forWire(msg));
       showToast('Guardado — envia quando ligares os dados');
     }
-  }
-
-  function handleSendText() {
-    const body = text.trim();
-    if (!body) return;
-    sendPayload({ kind: 'text', body });
-    setText('');
-    bus.publishCtrl({ t: 'typing', typing: false });
   }
 
   async function handleImage(fromCamera, viewOnce) {
@@ -286,38 +292,33 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
   }
   function cancelRec() { recRef.current?.cancel(); recRef.current = null; setRecording(false); }
 
-  function openViewOnce(msg) {
+  const openViewOnce = useCallback((msg) => {
     setViewOnceSrc(msg.mediaData);
     markConsumedByClientId(msg.clientId).then(refresh);
     bus.publishCtrl({ t: 'consumed', clientId: msg.clientId });
-  }
-  function playVoiceOnce(msg) {
+  }, [bus, refresh]);
+  const playVoiceOnce = useCallback((msg) => {
     setVoAudio(msg.mediaData);
     markConsumedByClientId(msg.clientId).then(refresh);
     bus.publishCtrl({ t: 'consumed', clientId: msg.clientId });
-  }
+  }, [bus, refresh]);
 
-  function onTextChange(v) {
-    setText(v);
-    if (!typingTimer.current) bus.publishCtrl({ t: 'typing', typing: true });
-    clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => {
-      bus.publishCtrl({ t: 'typing', typing: false });
-      typingTimer.current = null;
-    }, 1200);
-  }
+  const registerRef = useCallback((clientId, el) => {
+    if (clientId && el) bubbleRefs.current[clientId] = el;
+  }, []);
 
-  function jumpTo(clientId) {
+  const jumpTo = useCallback((clientId) => {
     const el = bubbleRefs.current[clientId];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.add('flash');
       setTimeout(() => el.classList.remove('flash'), 1200);
     }
-  }
+  }, []);
 
   // Context-menu actions
-  function doReply(m) { setReplyTarget(m); setMenuMsg(null); }
+  const doReply = useCallback((m) => { setReplyTarget(m); setMenuMsg(null); }, []);
+  const onLongPress = useCallback((m) => setMenuMsg(m), []);
   function doCopy(m) {
     if (m.kind === 'text') navigator.clipboard?.writeText(m.body).catch(() => {});
     setMenuMsg(null);
@@ -337,9 +338,12 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
     onProfileChanged?.();
   }
 
+  // Windowing: only render the most recent `visibleCount` messages.
+  const hasMore = messages.length > visibleCount;
+  const windowed = hasMore ? messages.slice(messages.length - visibleCount) : messages;
   const rows = [];
   let lastDay = '';
-  for (const m of messages) {
+  for (const m of windowed) {
     const d = fmtDay(m.createdAt);
     if (d !== lastDay) { rows.push({ divider: d, key: `d-${d}-${m.createdAt}` }); lastDay = d; }
     rows.push({ msg: m, key: `m-${m.localId || m.clientId}` });
@@ -350,7 +354,9 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
   return (
     <>
       <header className="header">
-        <div className="avatar">{partnerAvatar ? <img src={partnerAvatar} alt="" /> : partnerName[0]}</div>
+        <div className="avatar" onClick={() => setShowPartnerPhoto(true)} style={{ cursor: 'pointer' }}>
+          {partnerAvatar ? <img src={partnerAvatar} alt="" /> : partnerName[0]}
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
             {partnerName}
@@ -364,6 +370,11 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
       </header>
 
       <div className="chat-body" ref={bodyRef}>
+        {hasMore && (
+          <button className="load-more" onClick={() => setVisibleCount((c) => c + 50)}>
+            Ver mensagens anteriores
+          </button>
+        )}
         {rows.map((row) =>
           row.divider ? (
             <div key={row.key} className="day-divider">{row.divider}</div>
@@ -372,12 +383,12 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
               key={row.key}
               msg={row.msg}
               me={me}
-              partner={partner}
-              refAttr={(el) => { if (el && row.msg.clientId) bubbleRefs.current[row.msg.clientId] = el; }}
+              partnerName={partnerName}
+              registerRef={registerRef}
               onOpenViewOnce={openViewOnce}
               onPlayVoiceOnce={playVoiceOnce}
               onReply={doReply}
-              onLongPress={(m) => setMenuMsg(m)}
+              onLongPress={onLongPress}
               onJump={jumpTo}
             />
           ),
@@ -409,36 +420,19 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
         </>
       )}
 
-      <div className="composer">
-        <button className="icon-btn" onClick={() => setAttachOpen((v) => !v)}><IconAttach /></button>
-        <div className="field">
-          <textarea
-            rows={1}
-            placeholder="Mensagem"
-            value={text}
-            onChange={(e) => onTextChange(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText(); } }}
-          />
-          <button className={`vo-toggle ${voArmed ? 'on' : ''}`} title="Áudio de audição única"
-            onClick={() => { setVoArmed((v) => !v); showToast(voArmed ? 'Áudio normal' : 'Próximo áudio: ouvir 1×'); }}>
-            <IconEye />
-          </button>
-        </div>
-        {text.trim() ? (
-          <button className="send-btn" onClick={handleSendText}><IconSend /></button>
-        ) : (
-          <button
-            className={`send-btn ${recording ? 'recording' : ''}`}
-            onMouseDown={startRec}
-            onMouseUp={stopRec}
-            onMouseLeave={() => recording && cancelRec()}
-            onTouchStart={(e) => { e.preventDefault(); startRec(); }}
-            onTouchEnd={(e) => { e.preventDefault(); stopRec(); }}
-          >
-            <IconMic />
-          </button>
-        )}
-      </div>
+      <Composer
+        onSend={(body) => sendPayload({ kind: 'text', body })}
+        onTyping={(b) => bus.publishCtrl({ t: 'typing', typing: b })}
+        onAttach={() => setAttachOpen((v) => !v)}
+        voArmed={voArmed}
+        onToggleVo={() => { setVoArmed((v) => !v); showToast(voArmed ? 'Áudio normal' : 'Próximo áudio: ouvir 1×'); }}
+        recording={recording}
+        onMic={{
+          start: startRec,
+          stop: stopRec,
+          leave: () => recording && cancelRec(),
+        }}
+      />
 
       {menuMsg && (
         <>
@@ -483,13 +477,23 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
           </div>
         </div>
       )}
-      {editorFiles && (
-        <ImageEditor
-          files={editorFiles}
-          startViewOnce={editorVO}
-          onCancel={() => setEditorFiles(null)}
-          onSend={handleEditorSend}
+      {showPartnerPhoto && (
+        <PhotoViewer
+          src={partnerAvatar}
+          letter={partnerName[0]}
+          title={partnerName}
+          onClose={() => setShowPartnerPhoto(false)}
         />
+      )}
+      {editorFiles && (
+        <Suspense fallback={<div className="img-editor"><div className="ie-loading">A abrir editor…</div></div>}>
+          <ImageEditor
+            files={editorFiles}
+            startViewOnce={editorVO}
+            onCancel={() => setEditorFiles(null)}
+            onSend={handleEditorSend}
+          />
+        </Suspense>
       )}
       {toast && <div className="toast">{toast}</div>}
     </>

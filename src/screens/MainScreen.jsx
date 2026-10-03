@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { createBus } from '../lib/mqtt.js';
 import {
   getUser, getPartner, logout as authLogout,
@@ -21,10 +21,12 @@ import {
 import { buildSyncRequest, computeMissing } from '../lib/sync.js';
 import { ensureNotifyPermission, notify } from '../lib/notify.js';
 import { onInstallAvailable, promptInstall, isStandalone, isIOS } from '../lib/install.js';
-import { IconChat, IconStatus, IconSettings, IconDownload, IconClose } from '../lib/icons.jsx';
+import { IconChat, IconStatus, IconSettings, IconGame, IconDownload, IconClose } from '../lib/icons.jsx';
 import ChatScreen from './ChatScreen.jsx';
 import StatusScreen from './StatusScreen.jsx';
 import SettingsScreen from './SettingsScreen.jsx';
+
+const GamesScreen = lazy(() => import('../components/GamesScreen.jsx'));
 
 export default function MainScreen({ onLogout, onThemeChange }) {
   const me = getUser();
@@ -194,6 +196,11 @@ export default function MainScreen({ onLogout, onThemeChange }) {
           onReply={(payload) => { sendMessage(payload); setTab('chats'); }}
         />
       )}
+      {tab === 'games' && (
+        <Suspense fallback={<div className="screen" style={{ alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>A abrir jogos…</div>}>
+          <GamesScreen me={me} partner={partner} partnerOnline={partnerOnline} bus={bus} />
+        </Suspense>
+      )}
       {tab === 'settings' && (
         <SettingsScreen me={me} bus={bus} onLogout={logout} onThemeChange={onThemeChange} onProfileChanged={() => setPv((v) => v + 1)} />
       )}
@@ -203,6 +210,9 @@ export default function MainScreen({ onLogout, onThemeChange }) {
         </button>
         <button className={tab === 'status' ? 'active' : ''} onClick={() => setTab('status')}>
           <IconStatus /> Status
+        </button>
+        <button className={tab === 'games' ? 'active' : ''} onClick={() => setTab('games')}>
+          <IconGame /> Jogos
         </button>
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>
           <IconSettings /> Definições

@@ -746,3 +746,91 @@ input, textarea {
 
 /* photo caption in bubble */
 .msg-caption { margin-top: 4px; font-size: 14px; }
+
+/* ============ v6: perf + wrapping + photo viewer ============ */
+/* long messages wrap, keep line breaks, never scroll horizontally */
+.bubble { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.msg-text { white-space: pre-wrap; }
+
+.load-more {
+  align-self: center; margin: 6px auto 10px;
+  background: var(--panel); color: var(--accent-soft);
+  padding: 7px 16px; border-radius: 16px; font-size: 13px; font-weight: 600;
+}
+
+.photo-viewer {
+  position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,0.95);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px;
+}
+.photo-viewer .close-x { position: absolute; top: 20px; right: 20px; color: #fff; }
+.photo-viewer .pv-title { position: absolute; top: 24px; left: 20px; color: #fff; font-weight: 600; font-size: 17px; }
+.pv-body { max-width: 100%; max-height: 80vh; display: flex; align-items: center; justify-content: center; }
+.pv-body img { max-width: 100%; max-height: 80vh; border-radius: 12px; }
+.pv-letter {
+  width: 220px; height: 220px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 90px; font-weight: 700; color: #fff;
+}
+.pv-action { margin-top: 20px; min-width: 160px; }
+
+/* ============ v6: games ============ */
+.games-menu { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.games-hero {
+  display: flex; align-items: center; gap: 10px; justify-content: center;
+  color: var(--accent-soft); font-weight: 600; font-size: 16px; padding: 10px 0 6px;
+}
+.game-card {
+  display: flex; align-items: center; gap: 14px; text-align: left;
+  background: var(--bg-elev); border-radius: 16px; padding: 16px;
+  border: 1px solid var(--divider);
+}
+.game-card:active { background: var(--panel); }
+.game-emoji {
+  width: 52px; height: 52px; border-radius: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+  display: flex; align-items: center; justify-content: center; font-size: 26px; flex-shrink: 0;
+}
+.game-meta { display: flex; flex-direction: column; gap: 2px; }
+.game-name { font-weight: 600; font-size: 16px; }
+.game-desc { font-size: 13px; color: var(--text-dim); }
+.games-note { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+
+.game-play { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+.play-hint { text-align: center; color: var(--text-dim); margin: 30px 0; }
+.play-card {
+  border-radius: 20px; padding: 30px 22px; min-height: 180px;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center; box-shadow: var(--shadow);
+  background: linear-gradient(145deg, var(--accent), var(--accent-soft)); color: #fff;
+}
+.play-card.dare { background: linear-gradient(145deg, #ff6a00, #ff2d95); }
+.play-card.q { background: linear-gradient(145deg, #6a3df0, #a862ff); }
+.play-card.custom { background: linear-gradient(145deg, #14b789, #37e0a8); }
+.pc-tag { font-size: 13px; letter-spacing: 2px; opacity: 0.9; margin-bottom: 12px; font-weight: 700; }
+.pc-text { font-size: 21px; font-weight: 600; line-height: 1.4; }
+.play-actions { display: flex; gap: 12px; }
+.play-actions.two { }
+.play-actions button { flex: 1; }
+.btn-primary.alt { background: linear-gradient(135deg, #ff6a00, #ff2d95); }
+
+.prefer-wrap { display: flex; flex-direction: column; gap: 14px; }
+.prefer-opt {
+  background: var(--bg-elev); border: 2px solid var(--divider);
+  border-radius: 16px; padding: 22px; font-size: 18px; font-weight: 600; color: var(--text);
+  position: relative;
+}
+.prefer-opt.picked { border-color: var(--accent); }
+.prefer-opt:disabled { opacity: 1; }
+.prefer-tags { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
+.prefer-tags em {
+  font-style: normal; font-size: 12px; background: var(--accent); color: #fff;
+  padding: 3px 10px; border-radius: 12px;
+}
+
+.custom-add { display: flex; gap: 8px; }
+.custom-add input {
+  flex: 1; background: var(--input-bg); border-radius: 12px; padding: 12px 14px;
+  border: 1px solid var(--divider); font-size: 15px;
+}
+.custom-count { text-align: center; font-size: 12px; color: var(--text-dim); }

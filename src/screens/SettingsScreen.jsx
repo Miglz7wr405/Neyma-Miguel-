@@ -3,6 +3,7 @@ import { getTheme, setTheme, getProfile, saveProfile } from '../lib/auth.js';
 import { compressImage, pickFile } from '../lib/media.js';
 import { canInstall, onInstallAvailable, promptInstall, isIOS, isStandalone } from '../lib/install.js';
 import { IconPencil, IconDownload, IconCamera } from '../lib/icons.jsx';
+import PhotoViewer from '../components/PhotoViewer.jsx';
 
 const THEMES = [
   { id: 'rose', name: 'Rosa Confidencial', color: '#e91e63' },
@@ -17,6 +18,7 @@ export default function SettingsScreen({ me, bus, onLogout, onThemeChange, onPro
   const [savedToast, setSavedToast] = useState(false);
   const [installable, setInstallable] = useState(canInstall());
   const [iosHelp, setIosHelp] = useState(false);
+  const [showMyPhoto, setShowMyPhoto] = useState(false);
 
   useEffect(() => onInstallAvailable(setInstallable), []);
 
@@ -58,7 +60,7 @@ export default function SettingsScreen({ me, bus, onLogout, onThemeChange, onPro
       <header className="header"><h1>Definições</h1></header>
       <div className="settings">
         <div className="profile-hero">
-          <button className="avatar lg av-edit" onClick={changeAvatar}>
+          <button className="avatar lg av-edit" onClick={() => setShowMyPhoto(true)}>
             {avatar ? <img src={avatar} alt="" /> : (displayName || me.name)[0]}
             <span className="av-cam"><IconCamera /></span>
           </button>
@@ -111,6 +113,16 @@ export default function SettingsScreen({ me, bus, onLogout, onThemeChange, onPro
         </div>
       </div>
 
+      {showMyPhoto && (
+        <PhotoViewer
+          src={avatar}
+          letter={(displayName || me.name)[0]}
+          title="A minha foto"
+          actionLabel="Mudar foto"
+          onAction={() => { setShowMyPhoto(false); changeAvatar(); }}
+          onClose={() => setShowMyPhoto(false)}
+        />
+      )}
       {iosHelp && (
         <div className="viewonce-modal" onClick={() => setIosHelp(false)}>
           <div className="mini-modal" onClick={(e) => e.stopPropagation()}>
