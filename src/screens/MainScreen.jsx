@@ -21,7 +21,8 @@ import {
 import { buildSyncRequest, computeMissing } from '../lib/sync.js';
 import { ensureNotifyPermission, notify } from '../lib/notify.js';
 import { onInstallAvailable, promptInstall, isStandalone, isIOS } from '../lib/install.js';
-import { IconChat, IconStatus, IconSettings, IconGame, IconDownload, IconClose } from '../lib/icons.jsx';
+import { createVoice } from '../lib/voice.js';
+import { IconChat, IconStatus, IconSettings, IconGame, IconDownload, IconClose, IconPhone, IconPhoneOff, IconMicOff, IconMic } from '../lib/icons.jsx';
 import ChatScreen from './ChatScreen.jsx';
 import StatusScreen from './StatusScreen.jsx';
 import SettingsScreen from './SettingsScreen.jsx';
@@ -40,10 +41,31 @@ export default function MainScreen({ onLogout, onThemeChange }) {
   const [pv, setPv] = useState(0); // bump to re-read profiles/alias
   const [showInstall, setShowInstall] = useState(false);
   const [installDismissed, setInstallDismissed] = useState(false);
+  const [callState, setCallState] = useState('idle');
+  const [muted, setMuted] = useState(false);
   const messagesRef = useRef([]);
   messagesRef.current = messages;
+  const remoteAudioRef = useRef(null);
+
+  const voice = useMemo(() => createVoice(bus, me, partner, {
+    onState: setCallState,
+    onRemote: (stream) => {
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play().catch(() => {});
+      }
+    },
+  }), [bus, me.id, partner.id]);
+
+  const startCall = () => { setMuted(false); voice.call().catch(() => {}); };
 
   useEffect(() => onInstallAvailable(setShowInstall), []);
+
+  // Voice-call signaling over the ctrl channel.
+  useEffect(() => {
+    const off = bus.on('ctrl', (c) => { if (c.t === 'call') voice.onSignal(c); });
+    return () => { off(); try { voice.hangup(); } catch {} };
+  }, [bus, voice]);
 
   const bus = useMemo(() => createBus(me), [me.id]);
 
@@ -184,6 +206,7 @@ export default function MainScreen({ onLogout, onThemeChange }) {
           bus={bus}
           online={online}
           onProfileChanged={() => setPv((v) => v + 1)}
+          onStartCall={startCall}
         />
       )}
       {tab === 'status' && (
@@ -198,7 +221,7 @@ export default function MainScreen({ onLogout, onThemeChange }) {
       )}
       {tab === 'games' && (
         <Suspense fallback={<div className="screen" style={{ alignItems: 'center', justifyContent: 'center', color: 'var(--text-dim)' }}>A abrir jogos…</div>}>
-          <GamesScreen me={me} partner={partner} partnerOnline={partnerOnline} bus={bus} />
+          <GamesScreen me={me} partner={partner} partnerOnline={partnerOnline} bus={bus} onStartCall={startCall} />
         </Suspense>
       )}
       {tab === 'settings' && (
@@ -218,6 +241,37 @@ export default function MainScreen({ onLogout, onThemeChange }) {
           <IconSettings /> Definições
         </button>
       </nav>
+
+      <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
+      {callState !== 'idle' && (
+        <div className="call-overlay">
+          <div className="call-avatar">{partner.name[0]}</div>
+          <div className="call-name">{partner.name}</div>
+          <div className="call-status">
+            {callState === 'calling' && 'A chamar…'}
+            {callState === 'incoming' && 'Chamada de voz…'}
+            {callState === 'connecting' && 'A ligar…'}
+            {callState === 'connected' && 'Em chamada 🎙️'}
+          </div>
+          <div className="call-actions">
+            {callState === 'incoming' ? (
+              <>
+                <button className="call-btn reject" onClick={() => voice.hangup()}><IconPhoneOff /></button>
+                <button className="call-btn accept" onClick={() => voice.accept().catch(() => {})}><IconPhone /></button>
+              </>
+            ) : (
+              <>
+                {callState === 'connected' && (
+                  <button className={`call-btn mute ${muted ? 'on' : ''}`} onClick={() => setMuted(voice.toggleMute())}>
+                    {muted ? <IconMicOff /> : <IconMic />}
+                  </button>
+                )}
+                <button className="call-btn reject" onClick={() => voice.hangup()}><IconPhoneOff /></button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

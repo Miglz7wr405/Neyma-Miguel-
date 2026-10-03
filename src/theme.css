@@ -834,3 +834,79 @@ input, textarea {
   border: 1px solid var(--divider); font-size: 15px;
 }
 .custom-count { text-align: center; font-size: 12px; color: var(--text-dim); }
+
+/* ============ v7: game levels, answers, choices, voice ============ */
+.voice-cta {
+  width: 100%; background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+  color: #fff; padding: 14px; border-radius: 14px; font-weight: 600; box-shadow: var(--shadow);
+  margin-bottom: 4px;
+}
+
+.level-picker { display: flex; gap: 8px; }
+.level-picker button {
+  flex: 1; padding: 9px; border-radius: 12px; background: var(--bg-elev);
+  color: var(--text-dim); font-weight: 600; font-size: 13px; border: 1px solid var(--divider);
+}
+.level-picker button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.play-card.pop { animation: cardpop 0.22s ease-out; }
+@keyframes cardpop { from { transform: scale(0.92) rotate(-1deg); opacity: 0; } to { transform: scale(1) rotate(0); opacity: 1; } }
+.play-card.roul { background: linear-gradient(145deg, #ff9500, #ff2d95); }
+.play-card.guess { background: linear-gradient(145deg, #e0457b, #ff6a9a); }
+.play-card.mostlikely, .play-card.never { background: linear-gradient(145deg, #6a3df0, #a862ff); }
+
+.choice-wrap { display: flex; flex-direction: column; gap: 12px; }
+.choice-opt {
+  background: var(--bg-elev); border: 2px solid var(--divider); border-radius: 16px;
+  padding: 20px; font-size: 17px; font-weight: 600; color: var(--text);
+}
+.choice-opt.picked { border-color: var(--accent); background: var(--panel); }
+.choice-opt:disabled { opacity: 0.85; }
+.reveal {
+  background: var(--bg-elev); border-radius: 14px; padding: 14px; text-align: center;
+  display: flex; flex-direction: column; gap: 6px; font-size: 15px;
+}
+.reveal-match { color: var(--accent-soft); font-weight: 700; margin-top: 4px; }
+
+/* real-time answers inside a game */
+.answers { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.answers-list {
+  max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;
+  background: var(--bg-elev); border-radius: 12px; padding: 10px;
+}
+.answers-empty { color: var(--text-dim); font-size: 13px; text-align: center; padding: 10px; }
+.ans { font-size: 14px; padding: 7px 10px; border-radius: 10px; max-width: 90%; }
+.ans.me { align-self: flex-end; background: var(--bubble-me); color: var(--bubble-me-ink); }
+.ans.them { align-self: flex-start; background: var(--bubble-them); color: var(--bubble-them-ink); }
+.ans b { opacity: 0.8; font-weight: 600; }
+.answers-input { display: flex; gap: 8px; align-items: center; }
+.answers-input input {
+  flex: 1; background: var(--input-bg); border-radius: 22px; padding: 11px 15px;
+  border: 1px solid var(--divider); font-size: 15px;
+}
+
+/* voice call overlay */
+.call-overlay {
+  position: fixed; inset: 0; z-index: 70;
+  background: radial-gradient(circle at top, rgba(233,30,99,0.3), transparent 60%), rgba(10,6,8,0.98);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  color: #fff;
+}
+.call-avatar {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-soft));
+  display: flex; align-items: center; justify-content: center; font-size: 52px; font-weight: 700;
+  animation: callpulse 1.8s ease-in-out infinite;
+}
+@keyframes callpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(233,30,99,0.5); } 50% { box-shadow: 0 0 0 22px rgba(233,30,99,0); } }
+.call-name { font-size: 24px; font-weight: 700; }
+.call-status { color: rgba(255,255,255,0.75); font-size: 15px; }
+.call-actions { display: flex; gap: 26px; margin-top: 30px; }
+.call-btn {
+  width: 66px; height: 66px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  color: #fff;
+}
+.call-btn.accept { background: #48d18a; }
+.call-btn.reject { background: #ff3b47; }
+.call-btn.mute { background: rgba(255,255,255,0.18); }
+.call-btn.mute.on { background: #fff; color: #111; }

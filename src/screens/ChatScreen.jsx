@@ -11,7 +11,7 @@ import PhotoViewer from '../components/PhotoViewer.jsx';
 import { partnerDisplayName, getPartnerProfile, savePartnerAlias } from '../lib/auth.js';
 import {
   IconCamera, IconImage, IconEye, IconTick, IconDoubleTick,
-  IconClose, IconReply, IconTrash, IconCopy, IconPencil, IconDoc, IconPin, IconPlay,
+  IconClose, IconReply, IconTrash, IconCopy, IconPencil, IconDoc, IconPin, IconPlay, IconPhone,
 } from '../lib/icons.jsx';
 
 const ImageEditor = lazy(() => import('../components/ImageEditor.jsx'));
@@ -183,7 +183,7 @@ function forWire(m) {
   return rest;
 }
 
-export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, messages, refresh, bus, online, onProfileChanged }) {
+export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, messages, refresh, bus, online, onProfileChanged, onStartCall }) {
   const [attachOpen, setAttachOpen] = useState(false);
   const [recording, setRecording] = useState(false);
   const [voArmed, setVoArmed] = useState(false); // next media = view-once
@@ -367,6 +367,7 @@ export default function ChatScreen({ me, partner, partnerOnline, partnerTyping, 
           </h1>
           <p className="sub">{partnerTyping ? 'a escrever…' : partnerOnline ? 'online' : 'offline'}</p>
         </div>
+        {onStartCall && <button className="icon-btn accent" title="Chamada de voz" onClick={onStartCall}><IconPhone /></button>}
       </header>
 
       <div className="chat-body" ref={bodyRef}>
